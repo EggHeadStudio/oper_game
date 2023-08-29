@@ -1,0 +1,7 @@
+canvas {
+    margin: 0 auto;
+    display: block;
+    border: 1px solid #ccc;
+}
+body { margin: 0; }
+canvas { display: block; }
