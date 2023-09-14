@@ -1,8 +1,8 @@
 // Create a new Phaser game configuration
 var config = {
     type: Phaser.AUTO,
-    width: 845,
-    height: 650,
+    width: 1560,
+    height: 1560,
     physics: {
         default: 'arcade',
         arcade: {
@@ -21,6 +21,7 @@ var game = new Phaser.Game(config);
 
 // Declare variables
 var player;
+var obstacle;
 
 // Preload game assets
 function preload() {
@@ -32,35 +33,43 @@ function preload() {
     this.load.image('laatta2', 'laatta2.png');
 
     this.load.image('lightSource', 'lightSource.png');
+
+    this.load.image('wall', 'seinä.png');
 }
 
 // Create game objects
 function create() {
+    //kamera asetukset----------------------------------------------------------------------------------
     this.cameras.main.setBackgroundColor('#ffffff');
+    var worldSize = 1560;
+    this.physics.world.setBounds(0, 0, worldSize, worldSize);
+    player = this.physics.add.sprite(worldSize / 2, worldSize / 2, 'head');
+    player.setOrigin(0.5, 0.5);
+    
+    var camera = this.cameras.main;
+    camera.startFollow(player, true, 0.1, 0.1);
+    camera.zoom = 1;
 
     // Add the background image as a tile sprite--------------------------------------------------------
-    var background = this.add.tileSprite(0, 0, game.config.width, game.config.height, 'laatta');
-    background.setOrigin(0);
-    // Set the scale and size of the tile sprite to create a grid effect
-    background.setScale(1); // Adjust the scale factor as needed
-    background.setAlpha(0.3);
-    var gridSize = 8; // Define the number of tiles in the grid
-    background.setSize(game.config.width * gridSize, game.config.height * gridSize);
-    background.setDepth(background.depth -1);
+    var tileWidth = 65; // laatan leveys pikseleissä
+    var tileHeight = 65; // laatan korkeus pikseleissä
+    var gridWidth = game.config.width / tileWidth;
+    var gridHeight = game.config.height / tileHeight;
+    //random distribution for the wafers
+    for (var i = 0; i < gridWidth * gridHeight; i++) {
+        var x = (i % gridWidth) * tileWidth;
+        var y = Math.floor(i / gridWidth) * tileHeight;
 
-    //var imageWidth = game.config.width / gridSize;
-    //var imageHeight = game.config.height / gridSize;
-    //
-    //// Distribute 'laatta' and 'laatta2' images in a grid next to each other
-    //for (var i = 0; i < gridSize; i++) {
-    //    for (var j = 0; j < gridSize; j++) {
-    //        var imageName = (i + j) % 3 === 0 ? 'laatta' : 'laatta2';
-    //        var image = this.add.image(i * imageWidth, j * imageHeight, imageName);
-    //        image.setOrigin(0);
-    //    }
-    //}
+        // Valitse satunnaisesti 'laatta' tai 'laatta2'
+        var tileKey = Math.random() < 0.5 ? 'laatta' : 'laatta2';
 
-    player = this.physics.add.sprite(400, 300, 'head');
+        var tile = this.add.image(x, y, tileKey);
+        tile.setOrigin(0);
+        tile.setAlpha(0.3);
+        tile.setDepth(-1);
+    }
+
+    //player = this.physics.add.sprite(400, 300, 'head');
     armLeft = this.physics.add.sprite(player.x - 20, player.y, 'left_arm');
     armRight = this.physics.add.sprite(player.x + 20, player.y, 'right_arm');
 
@@ -116,13 +125,53 @@ function create() {
     player.setDepth(1);
     armLeft.setDepth(0);
     armRight.setDepth(0);
+
+    // Luo seinät-------------------------------------------------------------------------------------
+    var wallThickness = 25;
+    var leftWall = this.add.tileSprite(0, game.config.height / 2, wallThickness, game.config.height, 'wall');
+    var rightWall = this.add.tileSprite(game.config.width, game.config.height / 2, wallThickness, game.config.height, 'wall');
+    var topWall = this.add.tileSprite(game.config.width / 2, 0, game.config.width, wallThickness, 'wall');
+    var bottomWall = this.add.tileSprite(game.config.width / 2, game.config.height, game.config.width, wallThickness, 'wall');
+
+    // Aseta seinät staattisiksi
+    this.physics.add.existing(leftWall, true);
+    this.physics.add.existing(rightWall, true);
+    this.physics.add.existing(topWall, true);
+    this.physics.add.existing(bottomWall, true);
+
+    // Aseta pelaaja ja seinät törmäämään
+    this.physics.add.collider(player, [leftWall, rightWall, topWall, bottomWall]);
+
+    // Luo este---------------------------------------------------------------------------------------
+    obstacle = this.physics.add.sprite(400, 300, 'obstacle');
+    // Aseta törmäykset pelaajan ja esteen välillä
+    this.physics.add.collider(player, obstacle);
+}
+this.physics.add.collider(player, obstacle, handleCollision, null, this);
+
+function handleCollision(player, obstacle) {
+    // Törmäyksen käsittelykoodi tulee tänne
+    // Esimerkiksi, vähennä pelaajan elämää
+    playerHealth -= 10;
 }
 
-
-// Update game logic
+// Update game logic----------------------------------------------------------------------------------------------------------
 function update() {
     // Rotate player towards the mouse cursor
-    player.rotation = Phaser.Math.Angle.Between(player.x, player.y, this.input.mousePointer.x, this.input.mousePointer.y) + Math.PI / 2;
+    var pointer = this.input.activePointer;
+    var angle = Phaser.Math.Angle.Between(
+        player.x, 
+        player.y, 
+        pointer.worldX, 
+        pointer.worldY
+    );
+    // Update player rotation in pointermove event instead of update function
+    this.input.on('pointermove', function () {
+        player.rotation = angle + Math.PI / 2;
+    });
+    // Update the pointer world coordinates
+    pointer.worldX = pointer.x + this.cameras.main.scrollX;
+    pointer.worldY = pointer.y + this.cameras.main.scrollY;
 
     // shadow or reflection
     shadowPlayer.setPosition(player.x, player.y + 10);
@@ -142,7 +191,7 @@ function update() {
 
     // Move player forward when the mouse button is pressed
     if (this.input.activePointer.isDown) {
-        this.physics.velocityFromRotation(player.rotation - Math.PI / 2, 200, player.body.velocity);
+        player.setVelocity(Math.cos(angle) * 200, Math.sin(angle) * 200);
 
         // Define the pivot point for the swinging motion
         var pivot = new Phaser.Math.Vector2(player.x, player.y);
